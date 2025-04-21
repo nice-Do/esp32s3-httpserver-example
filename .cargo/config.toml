@@ -3,7 +3,15 @@ target = "xtensa-esp32s3-espidf"
 
 [target.xtensa-esp32s3-espidf]
 linker = "ldproxy"
-runner = "espflash flash --chip esp32s3 --flash-freq 80mhz --flash-size 32mb --partition-table partitions.csv --port /dev/ttyUSB0 --monitor"
+runner = """
+  espflash flash 
+  --chip esp32s3 
+  --flash-freq 80mhz 
+  --flash-size 32mb 
+  --partition-table partitions.csv 
+  --port /dev/ttyUSB0 
+  --monitor
+"""
 rustflags = [ "--cfg",  "espidf_time64"]
 
 [unstable]
