@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>ESP32-S3 HTTP Demo</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+            :root {
+                --fg: #1f2937; /* text */
+                --muted: #6b7280; /* secondary text */
+                --bg: #f9fafb; /* page background */
+                --card: #ffffff; /* card background */
+                --primary: #2563eb; /* primary buttons */
+                --ok: #16a34a; /* success */
+                --danger: #dc2626; /* error */
+                --border: #e5e7eb; /* borders */
+                --mono:
+                    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                    "Liberation Mono", "Courier New", monospace;
+                --font:
+                    system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+                    Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                background: var(--bg);
+                color: var(--fg);
+                font: 16px/1.5 var(--font);
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }
+
+            .container {
+                max-width: 860px;
+                margin: 24px auto;
+                padding: 0 16px;
+            }
+
+            header {
+                margin-bottom: 16px;
+            }
+
+            h1 {
+                margin: 0 0 8px 0;
+                font-size: 1.6rem;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .subtitle {
+                color: var(--muted);
+                font-size: 0.95rem;
+                margin: 0;
+            }
+
+            .badge {
+                display: inline-block;
+                font-size: 12px;
+                padding: 2px 8px;
+                border-radius: 999px;
+                border: 1px solid var(--border);
+                background: #fff;
+                vertical-align: middle;
+            }
+
+            .card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 16px;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+            }
+
+            .grid {
+                display: grid;
+                gap: 12px;
+            }
+            @media (min-width: 640px) {
+                .grid-2 {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+            .kv {
+                display: flex;
+                align-items: baseline;
+                gap: 8px;
+            }
+            .kv .k {
+                color: var(--muted);
+                min-width: 140px;
+            }
+            .kv .v {
+                font-weight: 600;
+                letter-spacing: 0.2px;
+            }
+
+            .toolbar {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+                margin-top: 12px;
+            }
+
+            button {
+                appearance: none;
+                border: 1px solid var(--border);
+                background: var(--card);
+                color: var(--fg);
+                border-radius: 8px;
+                padding: 8px 12px;
+                cursor: pointer;
+                font-weight: 600;
+                transition:
+                    background 0.12s ease,
+                    border-color 0.12s ease,
+                    transform 0.02s ease;
+            }
+            button.primary {
+                background: var(--primary);
+                color: #fff;
+                border-color: transparent;
+            }
+            button:active {
+                transform: translateY(1px);
+            }
+
+            .status {
+                font-family: var(--mono);
+                font-size: 0.9rem;
+                color: var(--muted);
+            }
+            .status .ok {
+                color: var(--ok);
+            }
+            .status .err {
+                color: var(--danger);
+            }
+
+            .log {
+                margin-top: 12px;
+                height: 180px;
+                overflow: auto;
+                background: #0b1020;
+                color: #cbd5e1;
+                border-radius: 8px;
+                padding: 10px;
+                font-family: var(--mono);
+                font-size: 12px;
+                border: 1px solid #101938;
+                white-space: pre-wrap;
+            }
+
+            .footer {
+                margin-top: 18px;
+                color: var(--muted);
+                font-size: 0.85rem;
+                text-align: center;
+            }
+
+            code {
+                font-family: var(--mono);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>
+                    ESP32-S3 HTTP Demo
+                    <span id="conn-badge" class="badge">AP mode</span>
+                </h1>
+                <p class="subtitle">
+                    Simple web UI served from the device. Auto-refreshes sensor
+                    readings every 5 seconds.
+                </p>
+            </header>
+
+            <section class="card" aria-labelledby="sensor-heading">
+                <h2 id="sensor-heading" style="margin: 0">Sensor Data</h2>
+
+                <div class="grid grid-2" style="margin-top: 8px">
+                    <div class="kv">
+                        <div class="k">Temperature</div>
+                        <div class="v"><span id="temperature">--</span> °C</div>
+                    </div>
+                    <div class="kv">
+                        <div class="k">Humidity</div>
+                        <div class="v"><span id="humidity">--</span> %</div>
+                    </div>
+                    <div class="kv">
+                        <div class="k">Last updated</div>
+                        <div class="v"><span id="timestamp">--</span></div>
+                    </div>
+                    <div class="kv">
+                        <div class="k">Status</div>
+                        <div class="v status">
+                            HTTP <span id="http-status">idle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toolbar">
+                    <button id="refresh-btn" class="primary" type="button">
+                        Refresh Now
+                    </button>
+                    <span class="subtitle" aria-live="polite"
+                        >Auto refresh: 5s</span
+                    >
+                </div>
+
+                <div
+                    id="messages"
+                    class="log"
+                    aria-label="messages console"
+                    role="log"
+                ></div>
+            </section>
+
+            <div class="footer">
+                Access this page via the ESP32 AP IP address shown on the serial
+                monitor.<br />
+                API endpoints: <code>/api/sensor</code>, <code>/health</code>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                "use strict";
+
+                const $ = (id) => document.getElementById(id);
+                const ui = {
+                    temperature: $("temperature"),
+                    humidity: $("humidity"),
+                    timestamp: $("timestamp"),
+                    httpStatus: $("http-status"),
+                    refreshBtn: $("refresh-btn"),
+                    messages: $("messages"),
+                    connBadge: $("conn-badge"),
+                };
+
+                function log(line, level = "info") {
+                    const time = new Date().toLocaleTimeString();
+                    const prefix =
+                        level === "error"
+                            ? "[ERR] "
+                            : level === "warn"
+                              ? "[WRN] "
+                              : "[INF] ";
+                    ui.messages.textContent += `${time} ${prefix}${line}\n`;
+                    ui.messages.scrollTop = ui.messages.scrollHeight;
+                }
+
+                function setHttpStatus(text, ok) {
+                    ui.httpStatus.textContent = text;
+                    ui.httpStatus.className = ok ? "ok" : "err";
+                }
+
+                function formatTimestamp(sec) {
+                    const n = Number(sec);
+                    if (!Number.isFinite(n) || n <= 0) return "--";
+                    const d = new Date(n * 1000);
+                    return d.toLocaleString();
+                }
+
+                function updateUI(data) {
+                    const t = Number(data.temperature);
+                    const h = Number(data.humidity);
+                    const ts = Number(data.timestamp);
+                    ui.temperature.textContent = Number.isFinite(t)
+                        ? t.toFixed(1)
+                        : "--";
+                    ui.humidity.textContent = Number.isFinite(h)
+                        ? h.toFixed(1)
+                        : "--";
+                    ui.timestamp.textContent = formatTimestamp(ts);
+                }
+
+                async function fetchSensorData() {
+                    // Reduce device load when tab is not visible
+                    if (document.hidden) return;
+
+                    const ctrl =
+                        "AbortController" in window
+                            ? new AbortController()
+                            : null;
+                    const timeout = setTimeout(
+                        () => ctrl && ctrl.abort(),
+                        4000,
+                    ); // 4s timeout
+
+                    try {
+                        setHttpStatus("requesting...", true);
+                        const resp = await fetch("/api/sensor", {
+                            cache: "no-store",
+                            signal: ctrl ? ctrl.signal : undefined,
+                        });
+                        clearTimeout(timeout);
+
+                        if (!resp.ok) {
+                            setHttpStatus(`HTTP ${resp.status}`, false);
+                            log(
+                                `Request failed: ${resp.status} ${resp.statusText}`,
+                                "warn",
+                            );
+                            return;
+                        }
+
+                        const data = await resp.json();
+                        updateUI(data);
+                        setHttpStatus("ok", true);
+
+                        const tVal = Number(data.temperature);
+                        const hVal = Number(data.humidity);
+                        const tText = Number.isFinite(tVal)
+                            ? tVal.toFixed(1)
+                            : String(data.temperature);
+                        const hText = Number.isFinite(hVal)
+                            ? hVal.toFixed(1)
+                            : String(data.humidity);
+                        log(`Data updated: T=${tText}°C, H=${hText}%`);
+                    } catch (e) {
+                        setHttpStatus("error", false);
+                        const msg = e && e.message ? e.message : String(e);
+                        log(`Fetch error: ${msg}`, "error");
+                    }
+                }
+
+                // Bind events
+                ui.refreshBtn.addEventListener("click", fetchSensorData);
+                document.addEventListener("visibilitychange", () => {
+                    if (!document.hidden) fetchSensorData();
+                });
+
+                // Initial fetch and interval
+                fetchSensorData();
+                setInterval(fetchSensorData, 5000);
+            })();
+        </script>
+    </body>
+</html>
